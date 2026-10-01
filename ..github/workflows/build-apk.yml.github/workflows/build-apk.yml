@@ -20,8 +20,10 @@ jobs:
           python-version: '3.11'
 
       - name: Preparer le fichier principal
-        run: |
-          cp DetecteurSpam_PyDroid3-2.py main.py
+  run: |
+    PYFILE=$(find . -maxdepth 1 -type f -name "*.py" | head -n 1)
+    echo "Fichier Python trouve : $PYFILE"
+    cp "$PYFILE" main.py
 
       - name: Installer les dependances systeme
         run: |
