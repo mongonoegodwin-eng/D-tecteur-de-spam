@@ -21,14 +21,14 @@ jobs:
 
       - name: Preparer le fichier principal
         run: |
-          echo "Fichiers Python presents dans le depot :"
+          echo "Recherche des fichiers Python..."
           find . -type f -name "*.py"
           PYFILE=$(find . -type f -name "*.py" | head -n 1)
           if [ -z "$PYFILE" ]; then
             echo "Aucun fichier Python trouve !"
             exit 1
           fi
-          echo "Fichier utilise : $PYFILE"
+          echo "Fichier Python utilise : $PYFILE"
           cp "$PYFILE" main.py
 
       - name: Installer les dependances systeme
