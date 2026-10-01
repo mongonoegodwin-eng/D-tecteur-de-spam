@@ -11,83 +11,68 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Recuperer le depot
         uses: actions/checkout@v7
 
-      - name: Installer Python 3.11
+      - name: Installer Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Verifier les fichiers Python
+      - name: Installer Java
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Installer dependances Linux
         run: |
-          echo "Fichiers Python trouves :"
-          git ls-files '*.py'
+          sudo apt update
+          sudo apt install -y \
+            git zip unzip \
+            autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev \
+            automake libltdl-dev
 
-      - name: Trouver l'application Kivy
+      - name: Trouver le fichier Python
         shell: bash
         run: |
-          PYFILE=""
+          echo "Fichiers Python du depot :"
+          git ls-files '*.py'
 
-          while IFS= read -r file; do
-            if grep -qE '(^|[[:space:]])(from|import)[[:space:]]+kivy' "$file"; then
-              PYFILE="$file"
-              break
-            fi
-          done < <(git ls-files '*.py')
+          PYFILE=$(git ls-files '*.py' | head -n 1)
 
           if [ -z "$PYFILE" ]; then
-            echo "ERREUR : aucune application Kivy n'a ete trouvee."
-            echo "Voici les fichiers Python disponibles :"
-            git ls-files '*.py'
+            echo "ERREUR : aucun fichier Python trouve."
             exit 1
           fi
 
-          echo "Application trouvee : $PYFILE"
+          echo "Fichier utilise : $PYFILE"
           cp "$PYFILE" main.py
 
-          echo "Verification de main.py :"
+          echo "main.py cree :"
           ls -lh main.py
-
-      - name: Verifier buildozer.spec
-        run: |
-          test -f buildozer.spec
-          echo "buildozer.spec trouve."
-          sed -n '1,120p' buildozer.spec
-
-      - name: Installer les dependances systeme
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            openjdk-17-jdk \
-            autoconf \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            cmake \
-            libffi-dev \
-            libssl-dev \
-            automake \
-            libltdl-dev
 
       - name: Installer Buildozer
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "cython<3.4" buildozer
+          python -m pip install git+https://github.com/kivy/buildozer
+          python -m pip install legacy-cgi setuptools cython==0.29.34
 
-      - name: Construire l'APK
+      - name: Nettoyer les anciens fichiers Buildozer
         run: |
-          buildozer -v android debug
+          rm -rf .buildozer
+          rm -rf bin
 
-      - name: Publier l'APK
+      - name: Construire l APK
+        run: |
+          buildozer android debug
+
+      - name: Recuperer l APK
         uses: actions/upload-artifact@v4
         with:
           name: Detecteur-Spam-APK
