@@ -1,24 +1,67 @@
-name: Build Android APK
+name: Android APK
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      - name: Setup Python
+        uses: actions/setup-python@v7
         with:
-          workdir: .
-          buildozer_version: stable
+          python-version: "3.x"
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt update
+          sudo apt -y install automake libltdl-dev
+
+      - name: Check Buildozer
+        run: |
+          buildozer --help
+
+      - name: Prepare Android
+        run: |
+          sed -i.bak \
+            "s/# android.accept_sdk_license = False/android.accept_sdk_license = True/" \
+            buildozer.spec
+
+          sed -i.bak \
+            "s/#p4a.branch = master/p4a.branch = develop/" \
+            buildozer.spec
+
+          buildozer android p4a -- --help
+
+      - name: Build APK
+        run: |
+          test -f main.py
+          buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Detecteur-Spam-APK
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
+          if-no-files-found: error
