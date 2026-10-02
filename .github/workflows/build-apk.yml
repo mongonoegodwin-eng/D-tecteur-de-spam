@@ -13,78 +13,114 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    container:
-      image: kivy/buildozer:latest
-
     steps:
       - name: Recuperer le projet
         uses: actions/checkout@v7
 
-      - name: Trouver le fichier Python
+      - name: Installer Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Installer dependances Linux
+        run: |
+          sudo apt update
+          sudo apt install -y automake libltdl-dev
+
+      - name: Trouver et preparer main.py
         shell: bash
         run: |
-          echo "=== FICHIERS PYTHON ==="
+          echo "=== FICHIERS PYTHON DU DEPOT ==="
           git ls-files '*.py'
 
-          PYFILE=$(git ls-files '*.py' | head -n 1)
+          PYFILE=""
+
+          while IFS= read -r file; do
+            if grep -qE 'from kivy|import kivy' "$file"; then
+              PYFILE="$file"
+              break
+            fi
+          done < <(git ls-files '*.py')
 
           if [ -z "$PYFILE" ]; then
-            echo "ERREUR : aucun fichier Python trouve."
+            echo "ERREUR : aucun fichier Python Kivy trouve."
             exit 1
           fi
 
-          echo "Fichier choisi : $PYFILE"
+          echo "Fichier principal trouve : $PYFILE"
+
           cp "$PYFILE" main.py
 
-          echo "=== MAIN.PY ==="
+          echo "=== VERIFICATION ==="
           ls -lh main.py
+          head -n 10 main.py
 
-      - name: Creer une configuration Buildozer propre
+      - name: Creer buildozer.spec
         shell: bash
         run: |
           cat > buildozer.spec <<'EOF'
-          [app]
+[app]
 
-          title = Detecteur Spam
-          package.name = detecteurspam
-          package.domain = org.detecteurspam
+title = Detecteur Spam
+package.name = detecteurspam
+package.domain = org.detecteurspam
 
-          source.dir = .
-          source.include_exts = py,png,jpg,jpeg,kv,atlas
+source.dir = .
+source.include_exts = py,png,jpg,jpeg,kv,atlas
 
-          version = 1.0
+version = 1.0
 
-          requirements = python3,kivy
+requirements = python3,kivy
 
-          orientation = portrait
-          fullscreen = 0
+orientation = portrait
+fullscreen = 0
 
-          android.api = 36
-          android.minapi = 24
-          android.ndk = 28c
+android.api = 36
+android.minapi = 24
+android.ndk = 28c
 
-          android.accept_sdk_license = True
+android.accept_sdk_license = True
 
-          p4a.branch = develop
+p4a.branch = develop
 
-          [buildozer]
-          log_level = 2
-          warn_on_root = 1
-          EOF
+[buildozer]
+
+log_level = 2
+warn_on_root = 1
+EOF
 
           echo "=== BUILDOZER.SPEC ==="
           cat buildozer.spec
 
-      - name: Nettoyer Buildozer
-        shell: bash
+      - name: Installer Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install buildozer
+          python -m pip install legacy-cgi setuptools cython==0.29.34
+
+      - name: Initialiser Android
+        run: |
+          buildozer android p4a -- --help
+
+      - name: Nettoyer
         run: |
           rm -rf .buildozer
           rm -rf bin
 
       - name: Construire APK
-        shell: bash
         run: |
-          buildozer android debug
+          buildozer -v android debug
+
+      - name: Verifier APK
+        run: |
+          echo "=== APK ==="
+          ls -lh bin/*.apk
 
       - name: Recuperer APK
         uses: actions/upload-artifact@v4
