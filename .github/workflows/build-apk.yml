@@ -1,130 +1,24 @@
-name: Construire Detecteur Spam
+name: Build Android APK
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
+on: [push, workflow_dispatch]
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Recuperer le projet
-        uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Installer Python
-        uses: actions/setup-python@v7
+      - name: Build with Buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
         with:
-          python-version: "3.x"
+          workdir: .
+          buildozer_version: stable
 
-      - name: Installer Java 17
-        uses: actions/setup-java@v6
-        with:
-          java-version: "17"
-          distribution: "temurin"
-
-      - name: Installer dependances Linux
-        run: |
-          sudo apt update
-          sudo apt install -y automake libltdl-dev
-
-      - name: Trouver et preparer main.py
-        shell: bash
-        run: |
-          echo "=== FICHIERS PYTHON DU DEPOT ==="
-          git ls-files '*.py'
-
-          PYFILE=""
-
-          while IFS= read -r file; do
-            if grep -qE 'from kivy|import kivy' "$file"; then
-              PYFILE="$file"
-              break
-            fi
-          done < <(git ls-files '*.py')
-
-          if [ -z "$PYFILE" ]; then
-            echo "ERREUR : aucun fichier Python Kivy trouve."
-            exit 1
-          fi
-
-          echo "Fichier principal trouve : $PYFILE"
-
-          cp "$PYFILE" main.py
-
-          echo "=== VERIFICATION ==="
-          ls -lh main.py
-          head -n 10 main.py
-
-      - name: Creer buildozer.spec
-        shell: bash
-        run: |
-          cat > buildozer.spec <<'EOF'
-[app]
-
-title = Detecteur Spam
-package.name = detecteurspam
-package.domain = org.detecteurspam
-
-source.dir = .
-source.include_exts = py,png,jpg,jpeg,kv,atlas
-
-version = 1.0
-
-requirements = python3,kivy
-
-orientation = portrait
-fullscreen = 0
-
-android.api = 36
-android.minapi = 24
-android.ndk = 28c
-
-android.accept_sdk_license = True
-
-p4a.branch = develop
-
-[buildozer]
-
-log_level = 2
-warn_on_root = 1
-EOF
-
-          echo "=== BUILDOZER.SPEC ==="
-          cat buildozer.spec
-
-      - name: Installer Buildozer
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install buildozer
-          python -m pip install legacy-cgi setuptools cython==0.29.34
-
-      - name: Initialiser Android
-        run: |
-          buildozer android p4a -- --help
-
-      - name: Nettoyer
-        run: |
-          rm -rf .buildozer
-          rm -rf bin
-
-      - name: Construire APK
-        run: |
-          buildozer -v android debug
-
-      - name: Verifier APK
-        run: |
-          echo "=== APK ==="
-          ls -lh bin/*.apk
-
-      - name: Recuperer APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Detecteur-Spam-APK
-          path: bin/*.apk
-          if-no-files-found: error
+          path: ${{ steps.buildozer.outputs.filename }}
