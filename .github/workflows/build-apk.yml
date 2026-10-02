@@ -1,4 +1,4 @@
-name: Android APK
+name: Build Android APK
 
 on:
   push:
@@ -6,58 +6,109 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.14"
 
       - name: Setup Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            cmake \
+            libffi-dev \
+            libssl-dev \
+            automake \
+            autopoint \
+            gettext \
+            libltdl-dev
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-          python -m pip install .
+          python -m pip install git+https://github.com/kivy/buildozer
+          python -m pip install legacy-cgi setuptools cython==0.29.34
 
-      - name: Install Linux dependencies
+      - name: Verify project files
         run: |
-          sudo apt update
-          sudo apt -y install automake libltdl-dev
+          echo "=== PROJECT ==="
+          pwd
+          ls -la
 
-      - name: Check Buildozer
-        run: |
-          buildozer --help
+          echo "=== PYTHON FILES ==="
+          find . -maxdepth 2 -type f -name "*.py" -print
 
-      - name: Prepare Android
+          echo "=== MAIN.PY ==="
+          test -f main.py
+          ls -lh main.py
+
+          echo "=== BUILDOZER.SPEC ==="
+          test -f buildozer.spec
+          cat buildozer.spec
+
+      - name: Configure Android
         run: |
-          sed -i.bak \
-            "s/# android.accept_sdk_license = False/android.accept_sdk_license = True/" \
+          sed -i \
+            's/^# *android.accept_sdk_license = False/android.accept_sdk_license = True/' \
             buildozer.spec
 
-          sed -i.bak \
-            "s/#p4a.branch = master/p4a.branch = develop/" \
+          sed -i \
+            's/^# *p4a.branch = master/p4a.branch = develop/' \
             buildozer.spec
 
+          grep -q '^p4a.branch = develop' buildozer.spec || \
+            echo 'p4a.branch = develop' >> buildozer.spec
+
+          grep -q '^android.api = 36' buildozer.spec || \
+            echo 'android.api = 36' >> buildozer.spec
+
+          grep -q '^android.ndk = 29' buildozer.spec || \
+            echo 'android.ndk = 29' >> buildozer.spec
+
+          echo "=== CONFIGURATION ==="
+          grep -E '^(p4a.branch|android.api|android.ndk|android.minapi|android.accept_sdk_license)' buildozer.spec
+
+      - name: Prepare Android toolchain
+        run: |
           buildozer android p4a -- --help
 
       - name: Build APK
         run: |
-          test -f main.py
-          buildozer android debug
+          buildozer -v android debug
+
+      - name: Verify APK
+        run: |
+          echo "=== APK ==="
+          ls -lh bin/*.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
