@@ -1,0 +1,91 @@
+name: Construire Detecteur Spam
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: kivy/buildozer:latest
+
+    steps:
+      - name: Recuperer le projet
+        uses: actions/checkout@v7
+
+      - name: Trouver le fichier Python
+        shell: bash
+        run: |
+          echo "=== FICHIERS PYTHON ==="
+          git ls-files '*.py'
+
+          PYFILE=$(git ls-files '*.py' | head -n 1)
+
+          if [ -z "$PYFILE" ]; then
+            echo "ERREUR : aucun fichier Python trouve."
+            exit 1
+          fi
+
+          echo "Fichier choisi : $PYFILE"
+          cp "$PYFILE" main.py
+
+          echo "=== MAIN.PY ==="
+          ls -lh main.py
+
+      - name: Creer une configuration Buildozer propre
+        shell: bash
+        run: |
+          cat > buildozer.spec <<'EOF'
+          [app]
+
+          title = Detecteur Spam
+          package.name = detecteurspam
+          package.domain = org.detecteurspam
+
+          source.dir = .
+          source.include_exts = py,png,jpg,jpeg,kv,atlas
+
+          version = 1.0
+
+          requirements = python3,kivy
+
+          orientation = portrait
+          fullscreen = 0
+
+          android.api = 36
+          android.minapi = 24
+          android.ndk = 28c
+
+          android.accept_sdk_license = True
+
+          p4a.branch = develop
+
+          [buildozer]
+          log_level = 2
+          warn_on_root = 1
+          EOF
+
+          echo "=== BUILDOZER.SPEC ==="
+          cat buildozer.spec
+
+      - name: Nettoyer Buildozer
+        shell: bash
+        run: |
+          rm -rf .buildozer
+          rm -rf bin
+
+      - name: Construire APK
+        shell: bash
+        run: |
+          buildozer android debug
+
+      - name: Recuperer APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Detecteur-Spam-APK
+          path: bin/*.apk
+          if-no-files-found: error
